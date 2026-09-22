@@ -51,13 +51,32 @@ def fetch_data(endpoint: str, params: dict) -> list:
         return []
 
 
-def save_to_collection(data: list, collection_name: str, unique_keys: list):
-    """Insere ou atualiza os registros usando upsert para manter idempotência."""
+def save_to_collection(*args, **kwargs):
+    """Insere ou atualiza os registros no MongoDB usando update_one(..., upsert=True) para manter a idempotência.
+
+    Formatos aceitos:
+    - save_to_collection(data, collection_name, unique_keys, db=None)
+    - save_to_collection(db, data, collection_name, unique_keys)
+    """
+    db = kwargs.get("db")
+    if len(args) == 4 and not isinstance(args[0], list):
+        db, data, collection_name, unique_keys = args
+    elif len(args) == 3:
+        data, collection_name, unique_keys = args
+    elif len(args) == 4:
+        data, collection_name, unique_keys, db = args
+    else:
+        data = kwargs.get("data", [])
+        collection_name = kwargs.get("collection_name", "")
+        unique_keys = kwargs.get("unique_keys", [])
+
+    if db is None:
+        db = connect_to_mongodb()
+
     if not data:
         print(f"Nenhum dado para salvar na collection '{collection_name}'.")
         return
 
-    db = connect_to_mongodb()
     collection = db[collection_name]
 
     for record in data:
@@ -65,7 +84,7 @@ def save_to_collection(data: list, collection_name: str, unique_keys: list):
             continue
 
         filter_doc = {key: record.get(key) for key in unique_keys if key in record}
-        if not filter_doc:
+        if not filter_doc or len(filter_doc) < len(unique_keys):
             print(f"Registro ignorado em '{collection_name}': chaves únicas ausentes.")
             continue
 
@@ -74,18 +93,51 @@ def save_to_collection(data: list, collection_name: str, unique_keys: list):
     print(f"Collection '{collection_name}' atualizada com {len(data)} registros.")
 
 
+
 def main():
-    """Fluxo principal: busca dados da sessão no OpenF1 e salva no MongoDB."""
+    """Fluxo principal do coletor OpenF1:
+    1. Conectar ao MongoDB
+    2. Buscar sessão
+    3. Salvar sessão
+    4. Buscar pilotos
+    5. Salvar pilotos
+    6. Buscar voltas
+    7. Salvar voltas
+    """
     session_key = int(os.getenv("SESSION_KEY", "9159"))
-    meeting_key = int(os.getenv("MEETING_KEY", "1219"))
 
-    print(f"Buscando sessões para session_key={session_key} e meeting_key={meeting_key}...")
-    sessions = fetch_data("/sessions", {"session_key": session_key, "meeting_key": meeting_key})
+    # 1. Conectar ao MongoDB
+    db = connect_to_mongodb()
 
+    # 2. Buscar sessão
+    print(f"Buscando sessão para session_key={session_key}...")
+    sessions = fetch_data("/sessions", {"session_key": session_key})
+
+    # 3. Salvar sessão
     if sessions:
-        save_to_collection(sessions, "sessions", ["session_key"])
+        save_to_collection(sessions, "sessions", ["session_key"], db=db)
     else:
         print("Nenhuma sessão foi retornada pela API OpenF1.")
+
+    # 4. Buscar pilotos
+    print(f"Buscando pilotos para session_key={session_key}...")
+    drivers = fetch_data("/drivers", {"session_key": session_key})
+
+    # 5. Salvar pilotos
+    if drivers:
+        save_to_collection(drivers, "drivers", ["session_key", "driver_number"], db=db)
+    else:
+        print("Nenhum piloto foi retornado pela API OpenF1.")
+
+    # 6. Buscar voltas
+    print(f"Buscando voltas para session_key={session_key}...")
+    laps = fetch_data("/laps", {"session_key": session_key})
+
+    # 7. Salvar voltas
+    if laps:
+        save_to_collection(laps, "laps", ["session_key", "driver_number", "lap_number"], db=db)
+    else:
+        print("Nenhuma volta foi retornada pela API OpenF1.")
 
 
 if __name__ == "__main__":
@@ -93,3 +145,4 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         print(f"Erro na execução principal: {exc}")
+
