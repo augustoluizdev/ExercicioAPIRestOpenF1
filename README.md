@@ -1,34 +1,44 @@
 # ExercicioAPIRestOpenF1
 
-Coletor inicial de dados da API OpenF1 para MongoDB.
+Coletor Python para consumir a API OpenF1 e armazenar os dados em MongoDB de forma modular, configurável e idempotente.
 
-## Configuracao
+## Requisitos
 
-1. Instale as dependencias:
+- Python 3
+- requests
+- pymongo
+- python-dotenv
 
-	```bash
-	pip install -r requirements.txt
-	```
+## Configuração
 
-2. Inicie um MongoDB local ou informe outra conexao no arquivo `.env`:
+1. Instale as dependências:
 
-As variaveis `SESSION_KEY` e `MEETING_KEY` podem ser alteradas sem modificar o
-codigo. O banco utilizado pelo exercicio e `openf1_data`.
+```bash
+pip install -r requirements.txt
+```
 
-## Execucao
+2. Crie ou ajuste o arquivo `.env` com as variáveis necessárias:
 
-Com o MongoDB em funcionamento, execute:
+
+3. Verifique se o MongoDB está em execução localmente ou ajuste a `MONGO_URI` conforme seu ambiente.
+
+## Execução
 
 ```bash
 python f1_data_collector.py
 ```
 
-Nesta primeira etapa, o script consulta `/sessions` usando a sessao de
-demonstracao e salva os resultados na collection `sessions` com `upsert=True`.
-Isso permite executar o coletor novamente sem duplicar a sessao.
+O script executa a coleta da sessão de demonstração, salva os dados em `sessions`, `drivers` e `laps`, e usa `update_one(..., upsert=True)` para evitar duplicações.
 
-## Proxima etapa
+## Coleções e chaves únicas
 
-A base ja possui `connect_to_mongodb`, `fetch_data` e
-`save_to_collection`. A Pessoa 2 pode continuar o fluxo adicionando as buscas
-de `/drivers` e `/laps` e suas respectivas collections e chaves unicas.
+- `sessions`: `session_key`
+- `drivers`: `session_key` + `driver_number`
+- `laps`: `session_key` + `driver_number` + `lap_number`
+
+## Funcionalidades
+
+- Conexão com MongoDB via `connect_to_mongodb()`
+- Consulta à API OpenF1 via `fetch_data()`
+- Persistência idempotente via `save_to_collection()`
+- Fluxo principal em `main()` para sessão, pilotos e voltas
